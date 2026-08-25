@@ -4,6 +4,7 @@ use Nezasa\Checkout\Insurances\Providers\Ergo\ErgoInsurance;
 use Nezasa\Checkout\Insurances\Providers\HanseMerkur\HanseMerkurInsurance;
 use Nezasa\Checkout\Payments\Gateways\Computop\ComputopGateway;
 use Nezasa\Checkout\Payments\Gateways\Computop\ComputopTokenGateway;
+use Nezasa\Checkout\Payments\Gateways\Credit2000\Credit2000Gateway;
 use Nezasa\Checkout\Payments\Gateways\Invoice\InvoiceGateway;
 use Nezasa\Checkout\Payments\Gateways\Oppwa\OppwaWidgetGateway;
 use Nezasa\Checkout\Payments\Gateways\Stripe\StripeGateway;
@@ -67,6 +68,27 @@ return [
             'active' => (bool) env('CHECKOUT_COMPUTOP_TOKEN_ACTIVE', false),
             'name' => env('CHECKOUT_COMPUTOP_TOKEN_NAME', 'Computop - Token'),
         ],
+        /**
+         * Credit2000 hosted payment page (SOAP ASMX).
+         *
+         * Keep CHECKOUT_CREDIT2000_ACTIVE=false until vendor/company keys are configured
+         * and an end-to-end booking has been verified on staging.
+         *
+         * prepare_action_type:
+         * - "5" = approval only (preferred for authorize → book → capture)
+         * - "4" = charge on payment page (capture becomes a no-op)
+         * - "2" = test mode per Credit2000 docs
+         */
+        'credit2000' => [
+            'active' => (bool) env('CHECKOUT_CREDIT2000_ACTIVE', false),
+            'name' => env('CHECKOUT_CREDIT2000_NAME', 'Credit2000'),
+            'base_url' => env('CHECKOUT_CREDIT2000_BASE_URL', 'https://www.credit2000.co.il/pci_tkn_ver7/WCF/wsCredit2000.asmx'),
+            'vendor_name' => env('CHECKOUT_CREDIT2000_VENDOR_NAME', 'must_be_set_in_env'),
+            'company_key' => env('CHECKOUT_CREDIT2000_COMPANY_KEY', 'must_be_set_in_env'),
+            'lang' => env('CHECKOUT_CREDIT2000_LANG', 'he'),
+            'prepare_action_type' => env('CHECKOUT_CREDIT2000_PREPARE_ACTION_TYPE', '5'),
+            'purchase_type' => env('CHECKOUT_CREDIT2000_PURCHASE_TYPE', '1'),
+        ],
         'passolution' => [
             'active' => (bool) env('CHECKOUT_PASSOLUTION_ACTIVE', false),
             'base_url' => env('CHECKOUT_PASSOLUTION_BASE_URL', 'https://api.passolution.eu/api/v2'),
@@ -126,6 +148,7 @@ return [
         StripeGateway::class,
         ComputopGateway::class,
         ComputopTokenGateway::class,
+        Credit2000Gateway::class,
     ],
 
     'insurance_provider' => [

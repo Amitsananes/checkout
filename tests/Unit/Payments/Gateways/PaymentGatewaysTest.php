@@ -31,6 +31,7 @@ use Nezasa\Checkout\Payments\Dtos\PaymentPrepareData;
 use Nezasa\Checkout\Payments\Enums\TransactionStatusEnum;
 use Nezasa\Checkout\Payments\Gateways\Computop\ComputopGateway;
 use Nezasa\Checkout\Payments\Gateways\Computop\ComputopTokenGateway;
+use Nezasa\Checkout\Payments\Gateways\Credit2000\Credit2000Gateway;
 use Nezasa\Checkout\Payments\Gateways\Invoice\InvoiceGateway;
 use Nezasa\Checkout\Payments\Gateways\Oppwa\OppwaWidgetGateway;
 use Nezasa\Checkout\Payments\Gateways\Stripe\StripeGateway;
@@ -137,6 +138,7 @@ it('keeps the registered existing payment gateway contract surface unchanged', f
         StripeGateway::class,
         ComputopGateway::class,
         ComputopTokenGateway::class,
+        Credit2000Gateway::class,
     ]);
 
     foreach ($registeredGateways as $gateway) {
@@ -150,6 +152,7 @@ it('keeps the registered existing payment gateway contract surface unchanged', f
             'Credit Card',
             'Computop',
             'Computop - Token',
+            'Credit2000',
         ])
         ->and(collect($registeredGateways)->map(fn (string $gateway): bool => $gateway::isTokenized())->all())->toBe([
             false,
@@ -157,12 +160,14 @@ it('keeps the registered existing payment gateway contract surface unchanged', f
             false,
             false,
             true,
+            false,
         ])
         ->and(is_subclass_of(OppwaWidgetGateway::class, WidgetPaymentContract::class))->toBeTrue()
         ->and(is_subclass_of(InvoiceGateway::class, RedirectPaymentContract::class))->toBeTrue()
         ->and(is_subclass_of(StripeGateway::class, RedirectPaymentContract::class))->toBeTrue()
         ->and(is_subclass_of(ComputopGateway::class, RedirectPaymentContract::class))->toBeTrue()
-        ->and(is_subclass_of(ComputopTokenGateway::class, RedirectPaymentContract::class))->toBeTrue();
+        ->and(is_subclass_of(ComputopTokenGateway::class, RedirectPaymentContract::class))->toBeTrue()
+        ->and(is_subclass_of(Credit2000Gateway::class, RedirectPaymentContract::class))->toBeTrue();
 });
 
 it('only exposes active existing payment providers with decryptable gateway names and classes', function (): void {
