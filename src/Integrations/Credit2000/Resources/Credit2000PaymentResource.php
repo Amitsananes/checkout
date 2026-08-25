@@ -117,6 +117,73 @@ class Credit2000PaymentResource extends BaseResource
     }
 
     /**
+     * Exchange payment-page uid for token + original SendParams transaction data.
+     *
+     * @return array<string, string>
+     */
+    public function getTokenAndApprovePro(string $uid): array
+    {
+        $body = $this->envelope(
+            'getTokenAndApprovePro',
+            '<uid>'.Credit2000Xml::escape($uid).'</uid>'
+        );
+
+        $response = $this->connector->send(new Credit2000SoapRequest(
+            'http://tempuri.org/getTokenAndApprovePro',
+            $body
+        ));
+
+        $raw = $response->body();
+        $params = Credit2000Xml::parseTaggedValues($raw, [
+            'tz_Number',
+            'club',
+            'confirmation_Source',
+            'action_Type',
+            'card_Reader',
+            'client_Name',
+            'host',
+            'company_Key',
+            'stars',
+            'reader_Data',
+            'currency',
+            'total_Pyment',
+            'purchase_Type',
+            'uID',
+            'vendor_Name',
+            'product_Id',
+            'return_Code',
+            'fixed_Amount',
+            'payments_Number',
+            'first_Payment',
+            'Approve',
+            'ValidDate',
+            'StyleSheet',
+            'Lang',
+        ]);
+        $parsed = Credit2000Xml::parseTaggedValues($raw, [
+            'token',
+            'cardType',
+            'mutag',
+        ]);
+
+        return [
+            'token' => (string) ($parsed['token'] ?? ''),
+            'cardType' => (string) ($parsed['cardType'] ?? ''),
+            'mutag' => (string) ($parsed['mutag'] ?? ''),
+            'product_Id' => (string) ($params['product_Id'] ?? ''),
+            'total_Pyment' => (string) ($params['total_Pyment'] ?? ''),
+            'currency' => (string) ($params['currency'] ?? ''),
+            'action_Type' => (string) ($params['action_Type'] ?? ''),
+            'uID' => (string) ($params['uID'] ?? ''),
+            'approveNum' => (string) ($params['Approve'] ?? ''),
+            'validDate' => (string) ($params['ValidDate'] ?? ''),
+            'return_Code' => (string) ($params['return_Code'] ?? ''),
+            'raw' => $raw,
+            'http_status' => (string) $response->status(),
+        ];
+    }
+
+    /**
      * Charge / refund / approve-only against a tokenized card.
      *
      * actionType: 5=approval only | 2=check only | 4=charge | 7=refund

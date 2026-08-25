@@ -86,6 +86,38 @@ function c2kConfig(): void
     ]);
 }
 
+function c2kProSoapBody(array $overrides = []): string
+{
+    $defaults = [
+        'product_Id' => Credit2000Xml::productId('01C2KOK'),
+        'total_Pyment' => '1000',
+        'currency' => '1',
+        'action_Type' => '5',
+        'uID' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+        'Approve' => '1234567',
+        'ValidDate' => '0729',
+        'token' => '9101111111116951',
+        'cardType' => '1',
+    ];
+    $data = array_merge($defaults, $overrides);
+
+    return '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+        .'<getTokenAndApproveProResponse xmlns="http://tempuri.org/">'
+        .'<getTokenAndApproveProResult>'
+        .'<product_Id>'.$data['product_Id'].'</product_Id>'
+        .'<total_Pyment>'.$data['total_Pyment'].'</total_Pyment>'
+        .'<currency>'.$data['currency'].'</currency>'
+        .'<action_Type>'.$data['action_Type'].'</action_Type>'
+        .'<uID>'.$data['uID'].'</uID>'
+        .'<Approve>'.$data['Approve'].'</Approve>'
+        .'<ValidDate>'.$data['ValidDate'].'</ValidDate>'
+        .'</getTokenAndApproveProResult>'
+        .'<token>'.$data['token'].'</token>'
+        .'<cardType>'.$data['cardType'].'</cardType>'
+        .'</getTokenAndApproveProResponse>'
+        .'</soap:Body></soap:Envelope>';
+}
+
 it('reports inactive by default', function (): void {
     Config::set('checkout.integrations.credit2000.active', false);
 
@@ -179,12 +211,12 @@ it('refuses capture when prepare_action_type was test mode 2', function (): void
     $mock->assertNothingSent();
 });
 
-it('authorizes with callback uid and token', function (): void {
+it('authorizes with callback uid and matching getTokenAndApprovePro data', function (): void {
     c2kConfig();
 
     MockClient::global([
         Credit2000SoapRequest::class => MockResponse::make(
-            body: '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><getTokenAndApproveResponse xmlns="http://tempuri.org/"><getTokenAndApproveResult>9101111111116951</getTokenAndApproveResult><approveNum>1234567</approveNum><returnCode>000</returnCode><customerId>9999</customerId><validDate>0729</validDate><cardType>1</cardType></getTokenAndApproveResponse></soap:Body></soap:Envelope>',
+            body: c2kProSoapBody(),
             status: 200,
         ),
     ]);
@@ -192,7 +224,6 @@ it('authorizes with callback uid and token', function (): void {
     $transaction = c2kTransaction('01C2KOK');
     $request = c2kRequest($transaction, [
         'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
-        'TotalPayment' => '10',
         'checkoutId' => 'chk_1',
     ]);
 
@@ -201,6 +232,111 @@ it('authorizes with callback uid and token', function (): void {
     expect($result->isSuccessful)->toBeTrue()
         ->and(data_get($result->resultData, 'credit2000.token'))->toBe('9101111111116951')
         ->and(data_get($result->resultData, 'credit2000.approveNum'))->toBe('1234567');
+});
+
+it('rejects authorize when provider product_Id mismatches prepare data', function (): void {
+    c2kConfig();
+
+    MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(
+            body: c2kProSoapBody(['product_Id' => '0000000000000001']),
+            status: 200,
+        ),
+    ]);
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, [
+        'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+    ]);
+
+    $result = (new Credit2000Gateway)->authorize($request, c2kPersistent());
+
+    expect($result->isSuccessful)->toBeFalse()
+        ->and(data_get($result->resultData, 'reason'))->toBe('product_id_mismatch');
+});
+
+it('rejects authorize when provider total_Pyment mismatches prepare data', function (): void {
+    c2kConfig();
+
+    MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(
+            body: c2kProSoapBody(['total_Pyment' => '2000']),
+            status: 200,
+        ),
+    ]);
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, [
+        'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+    ]);
+
+    $result = (new Credit2000Gateway)->authorize($request, c2kPersistent());
+
+    expect($result->isSuccessful)->toBeFalse()
+        ->and(data_get($result->resultData, 'reason'))->toBe('amount_mismatch');
+});
+
+it('rejects authorize when provider currency mismatches prepare data', function (): void {
+    c2kConfig();
+
+    MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(
+            body: c2kProSoapBody(['currency' => '2']),
+            status: 200,
+        ),
+    ]);
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, [
+        'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+    ]);
+
+    $result = (new Credit2000Gateway)->authorize($request, c2kPersistent());
+
+    expect($result->isSuccessful)->toBeFalse()
+        ->and(data_get($result->resultData, 'reason'))->toBe('currency_mismatch');
+});
+
+it('rejects authorize when provider action_Type mismatches prepare data', function (): void {
+    c2kConfig();
+
+    MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(
+            body: c2kProSoapBody(['action_Type' => '4']),
+            status: 200,
+        ),
+    ]);
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, [
+        'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+    ]);
+
+    $result = (new Credit2000Gateway)->authorize($request, c2kPersistent());
+
+    expect($result->isSuccessful)->toBeFalse()
+        ->and(data_get($result->resultData, 'reason'))->toBe('action_type_mismatch');
+});
+
+it('rejects authorize when provider uID mismatches callback uid', function (): void {
+    c2kConfig();
+
+    MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(
+            body: c2kProSoapBody(['uID' => 'other-uid-00000000-0000-0000-0000']),
+            status: 200,
+        ),
+    ]);
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, [
+        'params' => 'e14643ab-562a-4a64-a59a-49a9efa978e9',
+    ]);
+
+    $result = (new Credit2000Gateway)->authorize($request, c2kPersistent());
+
+    expect($result->isSuccessful)->toBeFalse()
+        ->and(data_get($result->resultData, 'reason'))->toBe('uid_mismatch');
 });
 
 it('rejects authorize when uid is missing', function (): void {

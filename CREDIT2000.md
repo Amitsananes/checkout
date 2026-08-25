@@ -26,7 +26,7 @@ CHECKOUT_CREDIT2000_ACTIVE=true
 | Package step | Credit2000 action | Success |
 |--------------|-------------------|---------|
 | `prepare()` | `SendParamToCredit2000` (`return_Code=123`) | hosted payment URL |
-| `authorize()` | callback `params` (uid) + `getTokenAndApprove` | non-empty token |
+| `authorize()` | callback `params` (uid) + `getTokenAndApprovePro` | token + provider `product_Id` / `total_Pyment` / `currency` / `action_Type` / `uID` match prepare data |
 | `capture()` | `CreditXML` `actionType=4` (or no-op if page already charged) | `returnCode=000` |
 | `abort()` | release uncaptured approval, or `CreditXML` `actionType=7` refund | `returnCode=000` |
 
@@ -53,6 +53,5 @@ CHECKOUT_CREDIT2000_ACTIVE=true
 ## UNVERIFIED until tested with real credentials
 
 - Exact success / failure `returnCode` variants beyond `000`
-- Whether callback `TotalPayment` is shekels or agorot (gateway normalizes both)
+- `getTokenAndApprovePro` field population on the live terminal (authorization binding is implemented in code but **not resolved until staging validates Pro responses**)
 - Installments (`purchase_Type=2`) — currently defaulted to regular (`1`)
-- Whether `getTokenAndApprove` always returns `returnCode`

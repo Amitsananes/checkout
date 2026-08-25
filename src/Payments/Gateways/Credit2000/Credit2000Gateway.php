@@ -28,7 +28,7 @@ use Throwable;
  *
  * Lifecycle aligned with Nezasa authorize → book → capture/abort:
  * 1. prepare: SendParamToCredit2000 (default action_Type=5 approval-only) → redirect URL
- * 2. authorize: parse host callback + getTokenAndApprove(uid)
+ * 2. authorize: callback uid + getTokenAndApprovePro(uid) with provider field verification
  * 3. capture: CreditXML actionType=4 with token (or no-op if prepare already charged)
  * 4. abort: CreditXML actionType=7 refund when a charge exists; otherwise mark released
  *
@@ -182,34 +182,17 @@ class Credit2000Gateway implements RedirectPaymentContract
                 ]);
             }
 
-            $expectedTotal = (string) ($persistentData['total_pyment'] ?? '');
-            $callbackTotalRaw = (string) ($callback['TotalPayment'] ?? $callback['TotalP'] ?? '');
+            $tokenResponse = Credit2000Connector::make()->payment()->getTokenAndApprovePro($uid);
 
-            if ($expectedTotal !== '' && $callbackTotalRaw !== '' && ! $this->amountsMatch($expectedTotal, $callbackTotalRaw)) {
+            $verificationFailure = $this->providerAuthorizationMismatch(
+                $persistentData,
+                $uid,
+                $tokenResponse
+            );
+
+            if ($verificationFailure !== null) {
                 return new AuthorizationResult(isSuccessful: false, resultData: [
-                    'reason' => 'amount_mismatch',
-                    'expected' => $expectedTotal,
-                    'actual' => $callbackTotalRaw,
-                    'callback' => $callback,
-                ]);
-            }
-
-            $tokenResponse = Credit2000Connector::make()->payment()->getTokenAndApprove($uid);
-
-            if (($tokenResponse['token'] ?? '') === '') {
-                return new AuthorizationResult(isSuccessful: false, resultData: [
-                    'reason' => 'token_missing',
-                    'token' => $tokenResponse,
-                    'callback' => $callback,
-                ]);
-            }
-
-            // returnCode 000 is success when present; some environments omit it after a valid token.
-            $returnCode = (string) ($tokenResponse['returnCode'] ?? '');
-
-            if ($returnCode !== '' && $returnCode !== self::RETURN_OK) {
-                return new AuthorizationResult(isSuccessful: false, resultData: [
-                    'reason' => 'token_rejected',
+                    'reason' => $verificationFailure,
                     'token' => $tokenResponse,
                     'callback' => $callback,
                 ]);
@@ -226,7 +209,7 @@ class Credit2000Gateway implements RedirectPaymentContract
                         'approveNum' => $tokenResponse['approveNum'] ?? '',
                         'validDate' => $tokenResponse['validDate'] ?? '',
                         'cardType' => $tokenResponse['cardType'] ?? '1',
-                        'customerId' => $tokenResponse['customerId'] ?? '000000001',
+                        'customerId' => '000000001',
                         'charged_on_page' => (bool) ($persistentData['charged_on_page'] ?? false),
                     ],
                 ]
@@ -406,6 +389,56 @@ class Credit2000Gateway implements RedirectPaymentContract
     }
 
     /**
+     * @param  array<string, mixed>  $persistentData
+     * @param  array<string, string>  $tokenResponse
+     */
+    private function providerAuthorizationMismatch(
+        array $persistentData,
+        string $callbackUid,
+        array $tokenResponse
+    ): ?string {
+        if (($tokenResponse['token'] ?? '') === '') {
+            return 'token_missing';
+        }
+
+        $expectedProductId = (string) ($persistentData['product_id'] ?? '');
+        $providerProductId = (string) ($tokenResponse['product_Id'] ?? '');
+
+        if ($expectedProductId === '' || $providerProductId === '' || $providerProductId !== $expectedProductId) {
+            return 'product_id_mismatch';
+        }
+
+        $expectedTotal = (string) ($persistentData['total_pyment'] ?? '');
+        $providerTotal = (string) ($tokenResponse['total_Pyment'] ?? '');
+
+        if ($expectedTotal === '' || $providerTotal === '' || $providerTotal !== $expectedTotal) {
+            return 'amount_mismatch';
+        }
+
+        $expectedCurrency = (string) ($persistentData['currency_code'] ?? '');
+        $providerCurrency = (string) ($tokenResponse['currency'] ?? '');
+
+        if ($expectedCurrency === '' || $providerCurrency === '' || $providerCurrency !== $expectedCurrency) {
+            return 'currency_mismatch';
+        }
+
+        $expectedAction = (string) ($persistentData['prepare_action_type'] ?? '');
+        $providerAction = (string) ($tokenResponse['action_Type'] ?? '');
+
+        if ($expectedAction === '' || $providerAction === '' || $providerAction !== $expectedAction) {
+            return 'action_type_mismatch';
+        }
+
+        $providerUid = (string) ($tokenResponse['uID'] ?? '');
+
+        if ($providerUid === '' || $providerUid !== $callbackUid) {
+            return 'uid_mismatch';
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{0: ?string, 1: ?string} [MM, YY]
      */
     private function parseValidDate(string $validDate): array
@@ -415,32 +448,6 @@ class Credit2000Gateway implements RedirectPaymentContract
         }
 
         return [substr($validDate, 0, 2), substr($validDate, 2, 2)];
-    }
-
-    /**
-     * Callback TotalPayment may arrive as major units ("10" / "10.00") or minor units ("1000").
-     */
-    private function amountsMatch(string $expectedMinor, string $callbackRaw): bool
-    {
-        $callbackRaw = trim($callbackRaw);
-
-        if ($callbackRaw === '' || ! is_numeric($callbackRaw)) {
-            return false;
-        }
-
-        if ($callbackRaw === $expectedMinor) {
-            return true;
-        }
-
-        if (! str_contains($callbackRaw, '.') && ctype_digit($callbackRaw)) {
-            if ((string) ((int) $callbackRaw * 100) === $expectedMinor) {
-                return true;
-            }
-        }
-
-        $asMinor = (string) (int) round(((float) $callbackRaw) * 100);
-
-        return $asMinor === $expectedMinor;
     }
 
     private function reportFailure(Throwable $exception): void
