@@ -38,7 +38,11 @@ class Credit2000Gateway implements RedirectPaymentContract
 {
     private const RETURN_OK = '000';
 
+    private const ACTION_TEST = '2';
+
     private const ACTION_CHARGE = '4';
+
+    private const ACTION_APPROVAL = '5';
 
     private const ACTION_REFUND = '7';
 
@@ -75,6 +79,17 @@ class Credit2000Gateway implements RedirectPaymentContract
             $tz = $data->contact->localIdNumber ?: '';
 
             $prepareAction = Config::string('checkout.integrations.credit2000.prepare_action_type');
+
+            // SendParams action_Type=2 is provider "Test" mode. Checkout capture always
+            // uses CreditXML actionType=4 (Charge), so test prepare must not be allowed
+            // to reach a live charge path.
+            if ($prepareAction === self::ACTION_TEST) {
+                return new PaymentInit(isAvailable: false, returnUrl: $data->returnUrl);
+            }
+
+            if (! in_array($prepareAction, [self::ACTION_APPROVAL, self::ACTION_CHARGE], true)) {
+                return new PaymentInit(isAvailable: false, returnUrl: $data->returnUrl);
+            }
 
             $response = Credit2000Connector::make()->payment()->sendParams([
                 'host' => (string) $data->returnUrl,
@@ -250,9 +265,19 @@ class Credit2000Gateway implements RedirectPaymentContract
                 ]);
             }
 
+            $prepareAction = (string) ($persistentData['prepare_action_type'] ?? '');
+
+            // Defense in depth: never CreditXML-charge a Test (action_Type=2) prepare.
+            if ($prepareAction === self::ACTION_TEST) {
+                return new CaptureResult(isSuccessful: false, persistentData: [
+                    ...$resultData,
+                    'capture_error' => 'test_mode_prepare_cannot_charge',
+                ]);
+            }
+
             // Payment page already charged (prepare_action_type=4).
             if ((bool) data_get($resultData, 'credit2000.charged_on_page', false)
-                || (string) ($persistentData['prepare_action_type'] ?? '') === self::ACTION_CHARGE) {
+                || $prepareAction === self::ACTION_CHARGE) {
                 $resultData['capture'] = [
                     'returnCode' => self::RETURN_OK,
                     'mode' => 'charged_on_payment_page',

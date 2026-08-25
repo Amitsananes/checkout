@@ -36,7 +36,7 @@ CHECKOUT_CREDIT2000_ACTIVE=true
 |-------|---------|
 | `5` | Approval only (preferred). Capture charges later via CreditXML. |
 | `4` | Charge on payment page. Capture is treated as already done. |
-| `2` | Test mode per Credit2000 docs. |
+| `2` | SendParams Test mode — **rejected by checkout**. Not safe: capture would still call CreditXML `actionType=4` (charge). Use a Credit2000 test terminal with `5` or `4` instead. |
 
 ## Amounts
 

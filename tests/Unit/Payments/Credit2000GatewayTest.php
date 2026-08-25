@@ -136,6 +136,49 @@ it('marks prepare unavailable for unsupported currency', function (): void {
     expect($init->isAvailable)->toBeFalse();
 });
 
+it('rejects prepare when prepare_action_type is test mode 2', function (): void {
+    c2kConfig();
+    Config::set('checkout.integrations.credit2000.prepare_action_type', '2');
+
+    $mock = MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(body: 'should-not-be-called', status: 500),
+    ]);
+
+    $init = (new Credit2000Gateway)->prepare(c2kPrepareData(c2kTransaction()));
+
+    expect($init->isAvailable)->toBeFalse();
+    $mock->assertNothingSent();
+});
+
+it('refuses capture when prepare_action_type was test mode 2', function (): void {
+    c2kConfig();
+
+    $mock = MockClient::global([
+        Credit2000SoapRequest::class => MockResponse::make(body: 'should-not-be-called', status: 500),
+    ]);
+
+    $persistent = c2kPersistent();
+    $persistent['prepare_action_type'] = '2';
+
+    $resultData = [
+        'credit2000' => [
+            'uid' => 'uid-1',
+            'token' => '9101111111116951',
+            'approveNum' => '1234567',
+            'validDate' => '0729',
+            'cardType' => '1',
+            'customerId' => '9999',
+            'charged_on_page' => false,
+        ],
+    ];
+
+    $capture = (new Credit2000Gateway)->capture(c2kRequest(c2kTransaction('01C2KOK'), []), $persistent, $resultData);
+
+    expect($capture->isSuccessful)->toBeFalse()
+        ->and(data_get($capture->persistentData, 'capture_error'))->toBe('test_mode_prepare_cannot_charge');
+    $mock->assertNothingSent();
+});
+
 it('authorizes with callback uid and token', function (): void {
     c2kConfig();
 

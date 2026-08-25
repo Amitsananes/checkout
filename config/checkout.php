@@ -77,7 +77,8 @@ return [
          * prepare_action_type:
          * - "5" = approval only (preferred for authorize → book → capture)
          * - "4" = charge on payment page (capture becomes a no-op)
-         * - "2" = test mode per Credit2000 docs
+         * - "2" = SendParams Test mode — NOT supported in checkout (rejected;
+         *         would otherwise be followed by a live CreditXML charge=4)
          */
         'credit2000' => [
             'active' => (bool) env('CHECKOUT_CREDIT2000_ACTIVE', false),
