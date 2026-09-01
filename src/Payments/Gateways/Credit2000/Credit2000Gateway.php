@@ -30,7 +30,8 @@ use Throwable;
  * 1. prepare: SendParamToCredit2000 (default action_Type=5 approval-only) → redirect URL
  * 2. authorize: callback uid + getTokenAndApprovePro(uid) with provider field verification
  * 3. capture: CreditXML actionType=4 with token (or no-op if prepare already charged)
- * 4. abort: CreditXML actionType=7 refund when a charge exists; otherwise mark released
+ * 4. abort: CreditXML actionType=7 refund when a charge exists; otherwise leave the
+ *    uncaptured ActionType 5 approval to expire (Credit2000 has no release API)
  *
  * @see Credit2000 API PDF (SendParamToCredit2000 / getTokenAndApprove / CreditXML)
  */
@@ -45,6 +46,13 @@ class Credit2000Gateway implements RedirectPaymentContract
     private const ACTION_APPROVAL = '5';
 
     private const ACTION_REFUND = '7';
+
+    /**
+     * Checkout-local abort marker when no capture occurred and no provider void exists.
+     * Credit2000 confirmed uncaptured ActionType 5 approvals expire automatically
+     * (~3 business days); there is no documented release/cancel API for them.
+     */
+    private const CANCEL_MODE_LEFT_TO_EXPIRE = 'uncaptured_approval_left_to_expire';
 
     public static function isActive(): bool
     {
@@ -319,11 +327,11 @@ class Credit2000Gateway implements RedirectPaymentContract
             $alreadyCaptured = $this->wasCaptured($resultData);
             $chargedOnPage = (bool) data_get($resultData, 'credit2000.charged_on_page', false);
 
-            // Approval-only and never captured: nothing to refund at the provider.
+            // No capture occurred: do not invent a provider release. Credit2000 has no
+            // API to void uncaptured ActionType 5 approvals; they expire automatically.
             if ($token === '' || (! $alreadyCaptured && ! $chargedOnPage)) {
                 $resultData['cancel'] = [
-                    'returnCode' => self::RETURN_OK,
-                    'mode' => 'release_uncaptured_approval',
+                    'mode' => self::CANCEL_MODE_LEFT_TO_EXPIRE,
                 ];
 
                 return new AbortResult(isSuccessful: true, persistentData: $resultData);
@@ -380,6 +388,10 @@ class Credit2000Gateway implements RedirectPaymentContract
      */
     private function wasAborted(array $resultData): bool
     {
+        if (data_get($resultData, 'cancel.mode') === self::CANCEL_MODE_LEFT_TO_EXPIRE) {
+            return true;
+        }
+
         return $this->isProviderSuccess((string) data_get($resultData, 'cancel.returnCode', ''));
     }
 

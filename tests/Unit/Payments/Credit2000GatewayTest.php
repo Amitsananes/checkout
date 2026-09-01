@@ -77,7 +77,7 @@ function c2kConfig(): void
     Config::set('checkout.integrations.credit2000', [
         'active' => true,
         'name' => 'Credit2000',
-        'base_url' => 'https://www.credit2000.co.il/pci_tkn_ver7/WCF/wsCredit2000.asmx',
+        'base_url' => 'https://www.credit2000.co.il/pci_emv_ver4/wcf/wscredit2000.asmx',
         'vendor_name' => 'cuTEST',
         'company_key' => 'DCSTEST==',
         'lang' => 'he',
@@ -408,7 +408,7 @@ it('treats page charge as already captured', function (): void {
         ->and(data_get($capture->persistentData, 'capture.mode'))->toBe('charged_on_payment_page');
 });
 
-it('releases uncaptured approval on abort without refund call', function (): void {
+it('leaves uncaptured approval to expire on abort without inventing a provider release', function (): void {
     c2kConfig();
 
     $transaction = c2kTransaction('01C2KOK');
@@ -428,5 +428,32 @@ it('releases uncaptured approval on abort without refund call', function (): voi
     $abort = (new Credit2000Gateway)->abort($request, c2kPersistent(), $resultData);
 
     expect($abort->isSuccessful)->toBeTrue()
-        ->and(data_get($abort->persistentData, 'cancel.mode'))->toBe('release_uncaptured_approval');
+        ->and(data_get($abort->persistentData, 'cancel.mode'))->toBe('uncaptured_approval_left_to_expire')
+        ->and(data_get($abort->persistentData, 'cancel.returnCode'))->toBeNull();
+});
+
+it('blocks capture after uncaptured approval was left to expire on abort', function (): void {
+    c2kConfig();
+
+    $transaction = c2kTransaction('01C2KOK');
+    $request = c2kRequest($transaction, []);
+    $resultData = [
+        'credit2000' => [
+            'uid' => 'uid-1',
+            'token' => '9101111111116951',
+            'approveNum' => '1234567',
+            'validDate' => '0729',
+            'cardType' => '1',
+            'customerId' => '9999',
+            'charged_on_page' => false,
+        ],
+        'cancel' => [
+            'mode' => 'uncaptured_approval_left_to_expire',
+        ],
+    ];
+
+    $capture = (new Credit2000Gateway)->capture($request, c2kPersistent(), $resultData);
+
+    expect($capture->isSuccessful)->toBeFalse()
+        ->and(data_get($capture->persistentData, 'capture_error'))->toBe('already_aborted');
 });

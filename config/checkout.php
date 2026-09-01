@@ -83,7 +83,7 @@ return [
         'credit2000' => [
             'active' => (bool) env('CHECKOUT_CREDIT2000_ACTIVE', false),
             'name' => env('CHECKOUT_CREDIT2000_NAME', 'Credit2000'),
-            'base_url' => env('CHECKOUT_CREDIT2000_BASE_URL', 'https://www.credit2000.co.il/pci_tkn_ver7/WCF/wsCredit2000.asmx'),
+            'base_url' => env('CHECKOUT_CREDIT2000_BASE_URL', 'https://www.credit2000.co.il/pci_emv_ver4/wcf/wscredit2000.asmx'),
             'vendor_name' => env('CHECKOUT_CREDIT2000_VENDOR_NAME', 'must_be_set_in_env'),
             'company_key' => env('CHECKOUT_CREDIT2000_COMPANY_KEY', 'must_be_set_in_env'),
             'lang' => env('CHECKOUT_CREDIT2000_LANG', 'he'),
